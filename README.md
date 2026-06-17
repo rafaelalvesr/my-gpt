@@ -147,11 +147,6 @@ python main.py            # trains a regex BPE and shows encode/decode + visuali
 pytest test/              # tests the Transformer and the tokenizers
 ```
 
-> ⚠️ Without `pytest` installed, you can run the suite with a small *stub* via `python3`
-> (see the instructions in [`CLAUDE.md`](CLAUDE.md)). The key equivalence test compares
-> `model.loss` in batched mode against the per-example loop — loss and gradients of **all**
-> parameters must match (float32 tolerance ~1e-6).
-
 ### 7. Dataset
 For training, we use the corpus `wikipedia_pt_1M.txt`, available at
 [`TucanoBR/wikipedia-PT`](https://huggingface.co/datasets/TucanoBR/wikipedia-PT/blob/main/wikipedia_pt_1M.txt)
