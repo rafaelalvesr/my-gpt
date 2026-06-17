@@ -1,0 +1,37 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Editor and local tooling
+.vscode/
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Generated training artifacts
+checkpoints/*.npz
+checkpoints/*.csv
+database/train_data/*.npy
+*.log
+
+#plan files and Claude.md fles
+plan/*.md
+CLAUDE.md
