@@ -152,6 +152,16 @@ pytest test/              # tests the Transformer and the tokenizers
 > `model.loss` in batched mode against the per-example loop — loss and gradients of **all**
 > parameters must match (float32 tolerance ~1e-6).
 
+### 7. Dataset
+For training, we use the corpus `wikipedia_pt_1M.txt`, available at
+[`TucanoBR/wikipedia-PT`](https://huggingface.co/datasets/TucanoBR/wikipedia-PT/blob/main/wikipedia_pt_1M.txt)
+on Hugging Face. Download it and place it in `database/`.
+
+> ⚠️ This file is ~163 MB and exceeds GitHub's 100 MB limit, so it is excluded from the
+> repository via `.gitignore`. You must download it manually before training.
+
+
+
 ## Structure
 
 | Path           | Contents                                                             |

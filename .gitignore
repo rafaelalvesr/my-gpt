@@ -32,6 +32,11 @@ checkpoints/*.csv
 database/train_data/*.npy
 *.log
 
+# Large corpus files (exceed GitHub's 100 MB limit)
+database/*.txt
+database/*.parquet
+database/tokenizer/
+
 #plan files and Claude.md fles
 plan/*.md
 CLAUDE.md
