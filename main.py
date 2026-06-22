@@ -29,7 +29,7 @@ model_dim, weight_decay, num_steps, warmup_steps, eval_interval, ...).
 
 Uso:
     python main.py                          # lê experiments.json
-    python main.py --file meus_exps.json --seed 0 --out checkpoints/experiments
+    python main.py --file meus_exps.json --seed 0 --out runs
     python main.py --resume                 # continua de onde parou (não limpa as pastas)
 """
 import argparse
@@ -55,43 +55,43 @@ VALID_FIELDS = {f.name for f in fields(GPTConfig)}
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Pipeline de experimentos de treino")
+    p = argparse.ArgumentParser(description="Pipeline of training experiments")
     p.add_argument("--file", type=str, default="experiments.json",
-                   help="JSON com a lista de experimentos (default: experiments.json)")
+                   help="JSON with the list of experiments (default: experiments.json)")
     p.add_argument("--seed", type=int, default=0, help="seed (init + batches)")
-    p.add_argument("--out", type=str, default="checkpoints/experiments",
-                   help="pasta-raiz das saídas")
+    p.add_argument("--out", type=str, default="runs",
+                   help="root folder for outputs")
     p.add_argument("--resume", action="store_true",
-                   help="continua de checkpoints existentes (não limpa as pastas)")
+                   help="resume from existing checkpoints (does not clean folders)")
     return p.parse_args()
 
 
 def load_experiments(path: Path):
-    """Lê e valida a lista de experimentos do JSON."""
+    """Reads and validates the list of experiments from the JSON."""
     exps = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(exps, list) or not exps:
-        raise ValueError(f"{path}: esperava uma lista não-vazia de experimentos")
+        raise ValueError(f"{path}: expected a non-empty list of experiments")
     names = set()
     for e in exps:
         if "name" not in e or "overrides" not in e:
-            raise ValueError(f"experimento sem 'name'/'overrides': {e}")
+            raise ValueError(f"experiment missing 'name'/'overrides': {e}")
         if e["name"] in names:
-            raise ValueError(f"nome de experimento duplicado: {e['name']!r}")
+            raise ValueError(f"duplicate experiment name: {e['name']!r}")
         names.add(e["name"])
     return exps
 
 
 def resolve_config(base: GPTConfig, vocab: int, overrides: dict) -> GPTConfig:
-    """Aplica os overrides ao GPTConfig, validando os nomes dos campos."""
+    """Applies the overrides to the GPTConfig, validating the field names."""
     bad = set(overrides) - VALID_FIELDS
     if bad:
-        raise ValueError(f"overrides desconhecidos {sorted(bad)}; "
-                         f"campos válidos: {sorted(VALID_FIELDS)}")
+        raise ValueError(f"unknown overrides {sorted(bad)}; "
+                         f"valid fields: {sorted(VALID_FIELDS)}")
     return replace(base, **{"vocab_size": vocab, **overrides})
 
 
 def setup_tokens_and_vocab(base: GPTConfig) -> int:
-    """Garante o cache de tokens e devolve o vocab_size resolvido pelo tokenizer."""
+    """Ensures the token cache and returns the vocab_size resolved by the tokenizer."""
     token_path = Path(base.token_path).with_suffix(".npy")
     if not token_path.exists():
         tok = load_gpt2_tokenizer()
@@ -100,8 +100,8 @@ def setup_tokens_and_vocab(base: GPTConfig) -> int:
 
 
 def compute_metrics(train_curve, val_curve) -> dict:
-    """Métricas-resumo de uma curva + status (NaN / DIVERGE / ok)."""
-    tail = float(np.mean(train_curve[-max(1, len(train_curve) // 5):]))  # média ~20% finais
+    """Summary metrics of a curve + status (NaN / DIVERGE / ok)."""
+    tail = float(np.mean(train_curve[-max(1, len(train_curve) // 5):]))  # mean of ~20% final steps
     vmin = float(np.nanmin(val_curve)) if np.isfinite(val_curve).any() else float("nan")
     if np.isnan(train_curve).any():
         status = "NaN"
@@ -114,27 +114,27 @@ def compute_metrics(train_curve, val_curve) -> dict:
 
 
 def run_experiment(exp: dict, base: GPTConfig, vocab: int, args) -> dict:
-    """Roda um experimento; devolve seu registro (config, métricas, curvas)."""
+    """Runs an experiment; returns its record (config, metrics, curves)."""
     name = exp["name"]
     run_dir = Path(args.out) / name
     if run_dir.exists() and not args.resume:
-        shutil.rmtree(run_dir)               # baseline limpo (a menos de --resume)
+        shutil.rmtree(run_dir)               # clean baseline (unless --resume)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = resolve_config(base, vocab, exp["overrides"])
     cfg = replace(cfg, checkpoint_path=str(run_dir / "model.npz"))
     (run_dir / "config.json").write_text(json.dumps(asdict(cfg), indent=2), encoding="utf-8")
 
-    # log dedicado deste experimento (anexado ao logger do train, removido ao fim)
+    # dedicated log for this experiment (attached to the train logger, removed at the end)
     train_logger = logging.getLogger("train.train")
     handler = logging.FileHandler(run_dir / "train.log")
     handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     train_logger.addHandler(handler)
 
-    print(f"\n{'='*60}\n  EXPERIMENTO: {name}\n  overrides: {exp['overrides']}\n"
+    print(f"\n{'='*60}\n  EXPERIMENT: {name}\n  overrides: {exp['overrides']}\n"
           f"  dir: {run_dir}\n{'='*60}")
     t0 = time.time()
-    np.random.seed(args.seed)                # init + batches idênticos entre experimentos
+    np.random.seed(args.seed)                # init + identical batches across experiments
     try:
         train(cfg)
     finally:
@@ -151,7 +151,7 @@ def run_experiment(exp: dict, base: GPTConfig, vocab: int, args) -> dict:
 
 
 def write_manifest(results, out_root: Path):
-    """Grava o tracker de experimentos (CSV legível + JSON detalhado)."""
+    """Writes the experiment tracker (human-readable CSV + detailed JSON)."""
     cols = ["name", "status", "final_train", "val_min", "train_tail",
             "num_steps", "seconds", "overrides"]
     with open(out_root / "results.csv", "w", newline="", encoding="utf-8") as f:
@@ -163,7 +163,7 @@ def write_manifest(results, out_root: Path):
                         r["num_steps"], r["seconds"], json.dumps(r["overrides"])])
     detailed = [{k: v for k, v in r.items() if not k.startswith("_")} for r in results]
     (out_root / "results.json").write_text(json.dumps(detailed, indent=2), encoding="utf-8")
-    print(f"\n[manifesto] {out_root/'results.csv'}  +  results.json")
+    print(f"\n[manifest] {out_root/'results.csv'}  +  results.json")
 
 
 def plot_curves(results, out_root: Path):
@@ -172,7 +172,7 @@ def plot_curves(results, out_root: Path):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except Exception as e:
-        print(f"[plot] matplotlib indisponível ({e}); usando só CSV/JSON.")
+        print(f"[plot] matplotlib unavailable ({e}); using only CSV/JSON.")
         return
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     for r in results:
@@ -187,8 +187,8 @@ def plot_curves(results, out_root: Path):
 
 
 def print_summary(results):
-    print(f"\n{'='*60}\n  RESUMO DOS EXPERIMENTOS\n{'='*60}")
-    print(f"{'name':>16} {'status':>8} {'train@fim':>10} {'val_min':>9} {'train_cauda':>12}")
+    print(f"\n{'='*60}\n  EXPERIMENT SUMMARY\n{'='*60}")
+    print(f"{'name':>16} {'status':>8} {'train@end':>10} {'val_min':>9} {'train_tail':>12}")
     ok = []
     for r in results:
         print(f"{r['name']:>16} {r['status']:>8} {r['final_train']:>10.3f} "
@@ -197,8 +197,8 @@ def print_summary(results):
             ok.append((r["train_tail"], r["name"]))
     if ok:
         ok.sort()
-        print(f"\n  → melhor train_loss (cauda) sem divergir: {ok[0][1]!r}")
-        print("    (confirme também o val_min: menor train com val acompanhando)")
+        print(f"\n  → best train_loss (tail) without diverging: {ok[0][1]!r}")
+        print("    (also check val_min: lowest train with val following)")
 
 
 def main():
@@ -206,8 +206,8 @@ def main():
     exps = load_experiments(Path(args.file))
     base = GPTConfig()
     vocab = setup_tokens_and_vocab(base)
-    print(f"{len(exps)} experimento(s) | vocab={vocab} | ln(V)={np.log(vocab):.3f} "
-          f"(loss esperado no step 1)")
+    print(f"{len(exps)} experiment(s) | vocab={vocab} | ln(V)={np.log(vocab):.3f} "
+          f"(expected loss at step 1)")
 
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)

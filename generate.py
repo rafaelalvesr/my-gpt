@@ -1,15 +1,24 @@
+import argparse
+
 from model import TransformerLM
 from tokenizer import load_gpt2_tokenizer
 
-tokenizer =  load_gpt2_tokenizer()
-model = TransformerLM.load("./checkpoints/model.npz")
+parser = argparse.ArgumentParser(description="Generate text from a trained checkpoint")
+parser.add_argument("--model", default="checkpoints/model.npz",
+                    help="path to the model.npz (e.g. runs/lr_3e-3/model.npz)")
+parser.add_argument("--prompt", default="Era uma vez", help="prompt to start from")
+parser.add_argument("--temperature", type=float, default=0.8, help="sampling temperature")
+parser.add_argument("--max-new-tokens", type=int, default=100, help="number of tokens to generate")
+args = parser.parse_args()
 
-prompt= "Era uma vez"
-tokens = tokenizer.encode(prompt)
+tokenizer = load_gpt2_tokenizer()
+model = TransformerLM.load(args.model)
 
-for _ in range(100):
+tokens = tokenizer.encode(args.prompt)
+
+for _ in range(args.max_new_tokens):
     context = tokens[-model.max_seq_len:]
-    next_id = model.predict_next_token(context, temperature = 0.8)
+    next_id = model.predict_next_token(context, temperature=args.temperature)
     tokens.append(int(next_id))
 
 print(tokenizer.decode(tokens))

@@ -28,6 +28,7 @@ Desktop.ini
 
 # Generated training artifacts
 checkpoints/*
+runs/
 database/train_data/*.npy
 
 

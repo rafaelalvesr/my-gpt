@@ -130,7 +130,7 @@ experiments declared in `experiments.json`. Each experiment runs in its own fold
 
 ```bash
 python main.py                                            # reads experiments.json
-python main.py --file my_exps.json --out checkpoints/experiments --seed 0
+python main.py --file my_exps.json --out runs --seed 0
 python main.py --resume                                   # continue without wiping run folders
 ```
 
@@ -152,12 +152,14 @@ from the saved `step`, restoring the AdamW moments.
 ### 4. Generate text
 
 ```bash
-python generate.py        # loads checkpoints/model.npz and generates from a prompt
+python generate.py                                       # loads checkpoints/model.npz
+python generate.py --model runs/lr_3e-3/model.npz \
+                   --prompt "Era uma vez" --temperature 0.8 --max-new-tokens 100
 ```
 
-Edit the `prompt` and `temperature` in [`generate.py`](generate.py). Generation is
-autoregressive: at each step the model predicts the next token and appends it to the context
-(clipped to `max_seq_len`).
+`--model` selects the checkpoint (default `checkpoints/model.npz`, e.g. point it at any
+experiment under `runs/`). Generation is autoregressive: at each step the model predicts the
+next token and appends it to the context (clipped to `max_seq_len`).
 
 ### 5. Tests
 
