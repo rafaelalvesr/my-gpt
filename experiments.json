@@ -1,0 +1,4 @@
+[
+  {"name": "wide_384_1500",      "overrides": {"learning_rate": 1e-3, "model_dim": 384,                   "num_steps": 1500, "warmup_steps": 150, "eval_interval": 100}},
+  {"name": "wide_deep_384_6L_1500", "overrides": {"learning_rate": 1e-3, "model_dim": 384, "num_layers": 6, "num_steps": 1500, "warmup_steps": 150, "eval_interval": 100}}
+]

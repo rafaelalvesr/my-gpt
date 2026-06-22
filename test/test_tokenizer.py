@@ -76,9 +76,9 @@ def test_bpe_wikipedia_example(factory):
     assert tok.encode(text) == expected
     assert tok.decode(tok.encode(text)) == text
 
-    # train_iterator must produce the same result
+    # training from an iterable of texts must produce the same result
     tok = factory()
-    tok.train_iterator([text], 256 + 3)
+    tok.train([text], 256 + 3)
     assert tok.encode(text) == expected
 
 
@@ -226,6 +226,30 @@ def test_encode_iterable_roundtrip(gpt2):
         ids = list(gpt2.encode_iterable(f))
     assert gpt2.decode(ids) == read("tinystories_sample.txt")
 
+# --------------------------------------------------------------------------- #
+# 9. Parallel training 
+# --------------------------------------------------------------------------- #
+def test_train_parallel_matches_serial():
+    text = ReadTextFile(fixture("corpus.en")).get_all_text()
+    batches = [text[i:i + 256] for i in range(0, len(text), 256)]
+    assert len(batches) > 1  
+
+    serial = RegexTokenizer(pattern=GPT2_SPLIT_PATTERN)
+    parallel = RegexTokenizer(pattern=GPT2_SPLIT_PATTERN)
+
+    vocab_size = 320  # 64 merges; 
+    serial.train(batches, vocab_size=vocab_size, verbose=False)
+    parallel.train_parallel(
+        batches,
+        vocab_size=vocab_size,
+        verbose=False,
+        num_processes=2,
+    )
+
+    assert parallel.merges == serial.merges
+    assert parallel.vocab == serial.vocab
+    assert parallel.encode(text) == serial.encode(text)
+    assert parallel.decode(parallel.encode(text)) == text
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

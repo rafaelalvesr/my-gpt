@@ -4,8 +4,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 import unicodedata
 
-
-
 def freq_pairs(token_ids: list[int], pairs_count = None) -> dict[(str, str), int]:
     """
     Computes the frequency of adjacent character pairs in the given text.
@@ -20,7 +18,6 @@ def merge_pair(token_ids: list[int], pair: tuple[str,str], new_id: int) -> list[
     Merges the specified pair of characters in the given list of tokens.
     """
     merged = []
-
     i = 0
     n = len(token_ids)
     while i < n:
@@ -32,6 +29,31 @@ def merge_pair(token_ids: list[int], pair: tuple[str,str], new_id: int) -> list[
             i += 1
     return merged
 
+def naive_bpe(token_sequences: list[list[int]], n_merges: int, verbose=False):
+    """Naive BPE: compute the frequency of all pairs from zero at each step, and merge the most frequent pair."""
+    vocab = {i: bytes([i]) for i in range(256)}
+    merges = {}
+    for i in range(n_merges):
+        idx = 256 + i
+        #global pair frequency, sum all sequences
+        pairs = {}
+        for ids in token_sequences:
+            for pair, count in freq_pairs(ids).items():
+                pairs[pair] = pairs.get(pair, 0) + count
+        if not pairs:
+            break #nothing else to merge
+        #most frequent pair, break ties  determinist by bytes of tokens
+        best_pair = max(pairs, key=lambda p: (pairs[p], vocab[p[0]], vocab[p[1]]))
+
+        #Apply the merge to all sequences
+        token_sequences = [merge_pair(ids, best_pair, idx) for ids in token_sequences]
+        vocab[idx] = vocab[best_pair[0]] + vocab[best_pair[1]]
+        merges[best_pair] = idx
+        if verbose and (i+1) % 20 == 0:
+            print(f"Merge {i + 1}/{n_merges}: {best_pair} -> {idx}")
+        
+    return merges, vocab
+
 # Helpers function
 def replace_control_characters(s: str) -> str:
     """
@@ -40,7 +62,6 @@ def replace_control_characters(s: str) -> str:
         https://stackoverflow.com/questions/4324790/removing-control-characters-from-a-string-in-python/19016117#19016117
         http://www.unicode.org/reports/tr44/#GC_Values_Table
     """
-
     chars = []
     for ch in s:
         if unicodedata.category(ch)[0] != "C":
@@ -73,14 +94,7 @@ class Tokenizer(ABC):
         return len(text_bytes) / len(token_ids) if token_ids else 1.0
 
     @abstractmethod
-    def train(self, text: str, vocab_size: int, verbose: bool = False) -> None:
-        """
-        Trains the tokenizer on the provided texts and builds a vocabulary of the specified size.
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-    
-    @abstractmethod
-    def train_iterator(self, text: Iterable[str], vocab_size: int, verbose: bool = False) -> None:
+    def train(self, text: str | Iterable[str], vocab_size: int, verbose: bool = False) -> None:
         """
         Trains the tokenizer on the provided texts and builds a vocabulary of the specified size.
         """
@@ -187,13 +201,11 @@ class Tokenizer(ABC):
             running_length += len(token)
             print(color + token, end="")
         print("\u001b[0m")
-
     
     def get_merges_pair(self) -> list[tuple[bytes, bytes]]:
         """Returns a list of merges of string from merges of token ids.
         The purpuse of this is to test the tokenizer using a reference merges (gpt2 merges) that are represented as string pairs, rather than token id pairs.
         """
-
         merge_texts = []
         for pair, _ in self.merges.items():
             t1 = self.vocab[pair[0]]
@@ -203,9 +215,9 @@ class Tokenizer(ABC):
     
     def get_vocab(self) -> dict[int, bytes]:
         """Build vocab using the actual vocab and the special tokens. 
-        The special tokes are added at the beginning of the vocab, 
+        The special tokens are added at the beginning of the vocab, 
         so they get the lowest token ids after the single byte tokens.
-        The purpuse of this is to test the tokenizer using a reference vocab (gpt2 vocab) that has special tokens with low token ids.
+        The purpuse of this is to test the tokenizer using a reference vocab (gpt2/4 vocab) that has special tokens with low token ids.
         """
         vocab ={}
         for i, special in enumerate(self.special_tokens):

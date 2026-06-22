@@ -15,21 +15,21 @@ class GPTConfig:
     # Model parameters
     num_layers: int = 4 #depth of the transformer models
     num_attention_heads: int = 8
-    model_dim: int = 256
+    model_dim: int = 384
     max_sequence_length: int = 256
     # Training parameters
     batch_size: int = 32
     learning_rate: float = 1e-3
-    num_steps: int = 10000  #num of batch iteration
+    num_steps: int = 2000  #num of batch iteration
     weight_decay: float = 1e-5
     beta1: float = 0.9
     beta2: float = 0.999
     learning_rate_schedule: bool = True
     clip_gradients: bool = True
-    warmup_steps: int = 2 # number of epoch of warmup
+    warmup_steps: int = 50 # number of steps of warmup (2-5% of total steps)
     max_grad_norm: float = 1.0 # max grad norm in gradient clipping.
     # Eval parameters:
-    eval_interval: int = 10 # validate each N steps
+    eval_interval: int = 100 # validate each N steps
     eval_examples: int = 16 # number of example in evaluation
     val_split: float = 0.95
     # Data parameters - REVISAR

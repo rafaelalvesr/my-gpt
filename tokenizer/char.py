@@ -22,9 +22,7 @@ class CharTokenizer(Tokenizer):
     def train(self, text: str, vocab_size: int, verbose: bool = False) -> None:
         # the char tokenizer does not need to be trained, since it is just a simple mapping of each byte to a token id
         pass
-    def train_iterator(self, text: Iterable[str], vocab_size: int, verbose: bool = False) -> None:
-        # the char tokenizer does not need to be trained, since it is just a simple mapping of each byte to a token id
-        pass
+
 
 class ByteTokenizer(Tokenizer):
     """
@@ -46,6 +44,3 @@ class ByteTokenizer(Tokenizer):
         # the byte tokenizer does not need to be trained, since it is just a simple mapping of each byte to a token id
         pass
     
-    def train_iterator(self, text: Iterable[str], vocab_size: int, verbose: bool = False) -> None:
-        # the byte tokenizer does not need to be trained, since it is just a simple mapping of each byte to a token id
-        pass

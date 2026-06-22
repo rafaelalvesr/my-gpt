@@ -5,13 +5,12 @@ Implements the GPT-4 Tokenizer as a light wrapper around the RegexTokenizer.
 Note that this is a pretrained tokenizer. By default and inside init(), it
 loads the pretrained tokenizer from the `cl100k_base` tokenizer of tiktoken.
 """
-
-from collections.abc import Iterable
 import tiktoken
-from .regex import RegexTokenizer
+from collections.abc import Iterable
+from .regex import RegexTokenizer, GPT4_SPLIT_PATTERN
 from .base import render_token
 
-GPT4_SPLIT_PATTERN = r"""'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]++[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+"""
+
 GPT4_SPECIAL_TOKENS = {
     '<|endoftext|>': 100257,
     '<|fim_prefix|>': 100258,
@@ -91,18 +90,17 @@ class GPT4Tokenizer(RegexTokenizer):
         # finally register the special tokens
         self.register_special_tokens(GPT4_SPECIAL_TOKENS)
 
-    
-    def encode_ordinary(self, text:str) -> list[int]:
-        #uodate de the encode to hangle the byte shuffle 
-        # (GPT-4 has a weird historical quirk where the single byte tokens are permuted in a different order, 
-        # so we have to shuffle the bytes before we encode them, and unshuffle them after we decode them)
-        encoded_ids = []
 
+    def _encode_ordinary_iter(self, text: str) -> Iterable[int]:
+        """
+        Update the encode to handle the byte shuffle 
+        (GPT-4 has a weird historical quirk where the single byte tokens are permuted in a different order, 
+        so we have to shuffle the bytes before we encode them, and unshuffle them after we decode them)
+        """
         for byte_values in self._pretokenize(text):
-            byte_values_shuffled = [self.byte_shuffle[b] for b in byte_values]
-            base_token_ids = self._to_base_token_ids(byte_values_shuffled)
-            encoded_ids.extend(self._encode_chunk(base_token_ids))
-        return encoded_ids
+            byte_values = [self.byte_shuffle[b] for b in byte_values]
+            base_token_ids = self._to_base_token_ids(byte_values)
+            yield from self._encode_chunk(base_token_ids)
     
     def decode(self, token_ids: list[int]) -> str:
         # we have to un-permute the bytes before we decode
@@ -113,11 +111,6 @@ class GPT4Tokenizer(RegexTokenizer):
     
     # this is a pretrained tokenizer, it is not intended to be trained
     def train(self, text, vocab_size, verbose=False):
-        raise NotImplementedError
-    
-
-    # this is a pretrained tokenizer, it is not intended to be trained
-    def train_iterator(self, text: Iterable[str], vocab_size: int, verbose: bool = False) -> None:
         raise NotImplementedError
 
  # save/load would require some thought.

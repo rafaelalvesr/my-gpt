@@ -1,30 +1,18 @@
-import sys
 import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
 import numpy as np
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from train.config import GPTConfig
 from train.optimizer import AdamW, learning_rate_schedule, clip_gradients
 from train.tensorvalue import no_grad
 from model import TransformerLM
 from tokenizer import load_gpt2_tokenizer
-from data.prepare import ReadTextFile
 
 
-#logging data during the train
+# Console logging. Per-experiment file logs are attached by the caller (main.py).
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-#save logs in a file
-file_handler = logging.FileHandler('train.log')
-file_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
 
 
 def prepare_dataset(tokenizer, data_loader, token_path: str):
@@ -68,6 +56,8 @@ def save_model(step, model, path, historic):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     base_dir = Path(path).parent
     data_file = base_dir / "history.csv"
+
+
     np.savetxt(data_file,
                 np.column_stack([historic["loss"], historic["val"]]),
                 header="train_loss val_loss")
@@ -175,7 +165,7 @@ def train(config):
 
         logger.info(row_template.format(step+1, f"{loss_media:.3f}", f"{val_media:.3f}", f"{perplexity:.0f}", f"{optimizer.lr:.2e}"))
 
-        if (step+1) % (config.eval_interval*2)==0:
+        if (step+1) % (config.eval_interval)==0:
             logger.info("-"*60)
             generate(model, tokenizer, prompt="Era uma vez", max_length=100, temperature=0.8)
             logger.info("-"*60)
@@ -184,25 +174,3 @@ def train(config):
         if (step+1) % 100 == 0 or (step+1) == config.num_steps:
             save_model(step, model, config.checkpoint_path, historic)
             save_trainer(step+1, optimizer, config)
-            
-
-
-def main():
-    config = GPTConfig() #trainning parameters
-    token_path = Path(config.token_path).with_suffix(".npy")
-    if not token_path.exists():
-        #load the pre-train GPT2 tokenizer in our class RegexTokenizer format.
-        tokenizer = load_gpt2_tokenizer() #ok, working..
-        data_loader = ReadTextFile(config.train_data_path)
-        prepare_dataset(tokenizer, data_loader,config.token_path)
-    
-    #config the vocab_size
-    tokenizer = load_gpt2_tokenizer()
-    config.vocab_size = len(tokenizer.vocab)
-
-    train(config)
-    
-
-
-if __name__ == "__main__":
-    main()

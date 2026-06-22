@@ -112,9 +112,10 @@ class MultiHeadAttention:
         self.d_model = d_model
         self.num_heads = num_heads
         self.d_head = d_model // num_heads
-        # Initialize weight matrices for Q, K, V and output projection
-        self.w_qkv = TensorValue(np.random.randn(d_model, 3*d_model) * (d_model ** -0.5)) #[d_model,3*d_model]
-        self.w_o = TensorValue(np.random.randn(d_model, d_model) * (d_model ** -0.5))
+        # Initialize weight matrices for Q, K, V
+        #init weights  (gpt2 paper: N(0, 0.02))
+        self.w_qkv = TensorValue(np.random.randn(d_model, 3*d_model) * 0.02) #[d_model,3*d_model]
+        self.w_o = TensorValue(np.random.randn(d_model, d_model) * 0.02)
 
         #parameters for optimization, grouped in a list for easy access wit flat format
         self.parameters = [self.w_qkv, self.w_o]
@@ -167,11 +168,12 @@ class MLP:
     def __init__(self, d_model: int, d_ff: int, activation: str = "relu"):
         if activation not in ("relu", "swiglu"):
             raise ValueError("Unsupported activation. Choose 'relu' or 'swiglu'.")
-        self.w1 = TensorValue(np.random.randn(d_model, d_ff) * (d_model ** -0.5)) #[d_model x d_ff]
-        self.w2 = TensorValue(np.random.randn(d_ff, d_model) * (d_ff ** -0.5)) #[d_ff x d_model]
+        #GPT-2 paper: N(0, 0.02) initialization for feedforward layers
+        self.w1 = TensorValue(np.random.randn(d_model, d_ff) * 0.02) #[d_model x d_ff]
+        self.w2 = TensorValue(np.random.randn(d_ff, d_model) * 0.02) #[d_ff x d_model]
         self.parameters = [self.w1, self.w2]
         if activation == "swiglu":
-            self.w3 = TensorValue(np.random.randn(d_model, d_ff) * (d_model ** -0.5))  # Extra weights for gating
+            self.w3 = TensorValue(np.random.randn(d_model, d_ff) * 0.02)  # Extra weights for gating
             self.parameters.append(self.w3)
 
         self.total_params = sum(p.data.size for p in self.parameters)
@@ -275,8 +277,8 @@ class TransformerLM:
         d_ff: int, dimensionality of the feedforward layer (e.g., 2048)
         num_layers: int, number of Transformer blocks (e.g., 6)
         max_seq_len: int, maximum sequence length for positional encoding (if using absolute positional encoding)
-        uuse_rope: bool, whether to apply RoPE positional encoding in attention (default True)
-    
+        use_rope: bool, whether to apply RoPE positional encoding in attention (default True)
+
       Weight tying (Press & Wolf, 2017): the output projection reuses the token
       embedding matrix — logits = x @ E.T — so there is NO separate output_projection
       parameter. This cuts ~V*D parameters and ties the input/output vocabulary
@@ -284,6 +286,16 @@ class TransformerLM:
       output projection x @ E.T) and the autograd accumulates them into E.grad.
       Caveat: changes the checkpoint layout (output_projection is gone) — checkpoints
       saved before tying are not loadable under the current param ordering.
+
+      Final LayerNorm (GPT-2 style): a LayerNorm (lnf_gamma/lnf_beta) is applied to the
+      residual stream after the last block, before the tied projection. With pre-LN the
+      residual stream is never renormalized otherwise, so the logits grow with depth and
+      the initial loss starts well above ln(V).
+
+      Weight init: all matrices use N(0, 0.02^2) (GPT-2 scheme). With weight tying the
+      embedding init also sets the logit scale, so 0.02 keeps the initial logits small
+      and the starting loss ≈ ln(vocab_size) — the expected loss of a uniform/random
+      model. A larger init (e.g. d_model^-0.5) makes the first-step loss overshoot.
 
 
                     ┌─────────────────────────────────────-┐
@@ -301,6 +313,8 @@ class TransformerLM:
                     │  │  │   + Add & Layer Norm  │  │     │
                     │  │  └───────────────────────┘  │     │
                     │  └──────┬──────────────────────┘     │
+                    │         │                            │
+                    │   Final Layer Norm (ln_f)            │
                     │         │                            │
                     │  Tied Projection (E^T) → Logits       │
                     │         │                            │
@@ -339,16 +353,23 @@ class TransformerLM:
         self._mask_bias = mask_to_bias(causal_mask_array)
    
 
-        # Token embedding and positional encoding (using RoPE, so no separate positional embedding)
-        self.token_embedding = TensorValue(np.random.randn(vocab_size, d_model) * (d_model ** -0.5))  # [vocab_size x d_model]
+        # Token embedding [V,D]. Init N(0, 0.02^2) (GPT-2 scheme): with weight tying this
+        # also sets the logit scale, keeping the initial loss ≈ ln(vocab_size).
+        self.token_embedding = TensorValue(np.random.randn(vocab_size, d_model) * 0.02)  # [vocab_size x d_model]
 
         # Stack of Transformer blocks
         self.blocks = [TransformerBlock(d_model, num_heads, d_ff) for _ in range(num_layers)]
+
+        #Add a layer norm at the end of the stack (GPT-2 style)
+        self.lnf_gamma = TensorValue(np.ones(d_model))
+        self.lnf_beta = TensorValue(np.zeros(d_model))
 
         # Collect all parameters for optimization
         self.parameters = [self.token_embedding]
         for block in self.blocks:
             self.parameters.extend(block.parameters)
+        
+        self.parameters.extend([self.lnf_gamma, self.lnf_beta])
 
         self.total_params = sum(p.data.size for p in self.parameters)
 
@@ -379,6 +400,9 @@ class TransformerLM:
         # Transformer blocks (attention + FFN, N times)
         for block in self.blocks:
             x = block.forward(x, mask_bias, self.rope)  # [B,S,D]
+
+        #Add final layer norm (GPT-2 style)
+        x = layer_norm(x, self.lnf_gamma, self.lnf_beta)  # [B,S,D]
 
         # Final linear projection to vocabulary size
         #Press & Wolf (2017) show that tying the token embedding and output projection weights can improve performance 
