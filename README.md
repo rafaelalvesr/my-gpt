@@ -120,6 +120,30 @@ The loop:
 - saves `checkpoints/model.npz` (architecture + weights) and `checkpoints/trainer.npz`
   (current step + AdamW state).
 
+#### Experiment pipeline (`main.py`)
+
+To compare hyperparameters, **`main.py`** drives the same `train()` over an explicit list of
+experiments declared in `experiments.json`. Each experiment runs in its own folder, with the
+**same seed** (identical init + batches, so the comparison is fair), and leaves a checkpoint,
+`history.csv`, the resolved `config.json` and a `train.log`. A top-level manifest
+(`results.csv` / `results.json`) plus an overlaid `curves.png` summarize the runs.
+
+```bash
+python main.py                                            # reads experiments.json
+python main.py --file my_exps.json --out checkpoints/experiments --seed 0
+python main.py --resume                                   # continue without wiping run folders
+```
+
+`experiments.json` is a list of `{"name", "overrides"}`, where `overrides` may set **any**
+`GPTConfig` field (`learning_rate`, `num_layers`, `model_dim`, `num_steps`, `warmup_steps`, …):
+
+```json
+[
+  {"name": "baseline", "overrides": {"num_steps": 500}},
+  {"name": "lr_3e-3",  "overrides": {"num_steps": 500, "learning_rate": 3e-3}}
+]
+```
+
 ### 3. Resume training
 
 Because the optimizer state is stored in `trainer.npz`, just run training again: it resumes
@@ -135,19 +159,13 @@ Edit the `prompt` and `temperature` in [`generate.py`](generate.py). Generation 
 autoregressive: at each step the model predicts the next token and appends it to the context
 (clipped to `max_seq_len`).
 
-### 5. Tokenizer demo
-
-```bash
-python main.py            # trains a regex BPE and shows encode/decode + visualization
-```
-
-### 6. Tests
+### 5. Tests
 
 ```bash
 pytest test/              # tests the Transformer and the tokenizers
 ```
 
-### 7. Dataset
+### 6. Dataset
 For training, we use the corpus `wikipedia_pt_1M.txt`, available at
 [`TucanoBR/wikipedia-PT`](https://huggingface.co/datasets/TucanoBR/wikipedia-PT/blob/main/wikipedia_pt_1M.txt)
 on Hugging Face. Download it and place it in `database/`.
@@ -169,5 +187,6 @@ on Hugging Face. Download it and place it in `database/`.
 | `notebooks/`   | **theory study track** (01→09) — see [`notebooks/README.md`](notebooks/README.md) |
 | `checkpoints/` | saved weights (`model.npz`) and training state (`trainer.npz`)      |
 | `database/`    | training corpora (text/parquet)                                     |
+| `main.py`      | experiment pipeline: runs `experiments.json` over `train()`, with manifest + curves |
 | `generate.py`  | text generation from a checkpoint                                   |
 | `microgpt.py`  | minimal reference GPT (Karpathy)                                    |

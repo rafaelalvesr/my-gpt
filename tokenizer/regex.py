@@ -115,7 +115,7 @@ class RegexTokenizer(Tokenizer):
         return list(self._encode_iter(text, allowed_special))
     
     def encode_iterable(self, text: Iterable[str], allowed_special: str  = "all") -> Iterable[int]:
-        """Encodes an iterable of strings into a list of token IDs"""
+        """Lazily encodes an iterable of strings, yielding token IDs one at a time (streaming)."""
         self._byte_to_token_id_map()
         for batch in text:
             if not batch:

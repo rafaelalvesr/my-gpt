@@ -103,11 +103,16 @@ class GPT4Tokenizer(RegexTokenizer):
             yield from self._encode_chunk(base_token_ids)
     
     def decode(self, token_ids: list[int]) -> str:
-        # we have to un-permute the bytes before we decode
-        text_bytes = b"".join(self.vocab[idx] for idx in token_ids)
-        text_bytes = bytes(self.inverse_byte_shuffle[b] for b in text_bytes)
-        text = text_bytes.decode("utf-8", errors="replace")
-        return text
+        parts = []
+        for idx in token_ids:
+            if idx in self.vocab: #ordinary token (shuffled bytes)
+                parts.append(bytes(self.inverse_byte_shuffle[b] for b in self.vocab[idx]))
+            elif idx in self.inverse_special_tokens: #special token
+                parts.append(self.inverse_special_tokens[idx].encode("utf-8"))
+            else:
+                raise ValueError(f"Token ID {idx} not found in vocab or special tokens")
+
+        return b"".join(parts).decode("utf-8", errors="replace")
     
     # this is a pretrained tokenizer, it is not intended to be trained
     def train(self, text, vocab_size, verbose=False):
