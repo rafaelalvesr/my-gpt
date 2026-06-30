@@ -300,7 +300,7 @@ class TransformerLM:
 
                     ┌─────────────────────────────────────-┐
    Input            │          TRANSFORMER LM              │
-   tokens ─────────►  Embedding + Pos. Encoding            │
+   tokens ─────────►  Embedding (E) + Pos. Encoding        │
                     │         │                            │
                     │  ┌──────▼──────────────────────┐     │
                     │  │      Transformer Block      │     │
@@ -316,7 +316,7 @@ class TransformerLM:
                     │         │                            │
                     │   Final Layer Norm (ln_f)            │
                     │         │                            │
-                    │  Tied Projection (E^T) → Logits       │
+                    │  Tied Projection (E^T) → Logits      │
                     │         │                            │
                     └─────────┼────────────────────────────┘
                               │
@@ -448,6 +448,8 @@ class TransformerLM:
         if temperature < 0:
             raise ValueError("temperature must be non-negative")
 
+        input_tokens = np.asarray(input_tokens, dtype=int)
+        
         with no_grad():  # Disable gradient tracking for inference
             #change format of input_token from [S] -> [B,S] 
             logits = self.forward(input_tokens[None,:])  # [None, S] -> [None, S,V]

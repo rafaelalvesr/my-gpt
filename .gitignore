@@ -41,7 +41,7 @@ database/tokenizer/
 plan/*.md
 CLAUDE.md
 CODE.md
-resume.txt
+resume
 
 #temporary files
 test/test.ipynb

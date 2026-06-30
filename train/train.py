@@ -16,16 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_dataset(tokenizer, data_loader, token_path: str):
+    """Encode the dataset into tokens and save it as a numpy array"""
     all_ids = []
     for id in tokenizer.encode_iterable(data_loader.iter_chunks()):
         all_ids.append(id)
     
     arr = np.array(all_ids, dtype=np.uint16)
     np.save(token_path,arr)
-    logger.info(f"Salvo {len(arr)} tokens em {token_path}")
+    logger.info("Save %d tokens in %s", len(arr), token_path)
 
 
 def get_batch(data: np.ndarray, batch_size: int, seq_len: int):
+    """Builds a batch of sequences from the data array. Returns x and y, where y is x shifted by one token."""
     max_start = len(data)-seq_len-1
     starts = np.random.randint(0, max_start, size=batch_size)
     x = np.stack( [data[i:i+seq_len].astype(np.uint16) for i in starts])
@@ -33,6 +35,7 @@ def get_batch(data: np.ndarray, batch_size: int, seq_len: int):
     return x,y
 
 def evaluate(model, data, num_examples, seq_len):
+    """Evaluates the model on a batch of validation data and returns the loss."""
     # Single batched forward over [num_examples, seq_len]; inference only,
     # so run under no_grad: no autograd graph is built (no grad buffers, no cycles).
     x, y = get_batch(data, num_examples, seq_len)
@@ -42,6 +45,7 @@ def evaluate(model, data, num_examples, seq_len):
 
 
 def generate(model, tokenizer, prompt, max_length=100, temperature=0.8):
+    """Generates text from the model given a prompt."""
     tokens = tokenizer.encode(prompt)
     for _ in range(max_length):
         context = tokens[-model.max_seq_len:]
@@ -52,28 +56,30 @@ def generate(model, tokenizer, prompt, max_length=100, temperature=0.8):
     logger.info(tokenizer.decode(tokens))
 
 def save_model(step, model, path, historic):
-    logger.info(f"Saving model at step {step+1}...")
+    """Saves the model and training history to disk."""
+    logger.info("Saving model at step %d...", step+1)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     base_dir = Path(path).parent
     data_file = base_dir / "history.csv"
-
 
     np.savetxt(data_file,
                 np.column_stack([historic["loss"], historic["val"]]),
                 header="train_loss val_loss")
     model.save(path)
-    logger.info(f"Model and history saved at {path} and {data_file}")
+    logger.info("Model and history saved at %s and %s", path, data_file)
 
 
 def save_trainer(step, optimizer, config):
+    """Saves the trainer state to disk."""
     path = Path(config.checkpoint_path).with_name("trainer.npz")
     np.savez(path, 
              step=step, 
              config = json.dumps(asdict(config)), 
              **optimizer.save_dict())
-    logger.info(f"Trainer state saved at {path}")
+    logger.info("Trainer state saved at %s", path)
 
 def load_trainer(path, optimizer):
+    """Loads the trainer state from disk."""
     ck = np.load(path)
     optimizer.load_dict(ck)
     return int(ck['step'])
@@ -86,7 +92,7 @@ def train(config):
     """
     # load model from the checkpoint if it exists, otherwise create a new one.
     if Path(config.checkpoint_path).exists():
-        logger.info(f"Loading model from {config.checkpoint_path}...")
+        logger.info("Loading model from %s...", config.checkpoint_path)
         model = TransformerLM.load(config.checkpoint_path)
     else:
         model = TransformerLM(
@@ -103,7 +109,7 @@ def train(config):
     optimizer = AdamW(model.parameters,lr_rate , beta1=config.beta1, beta2=config.beta2, weight_decay=config.weight_decay)
     trainer_path = Path(config.checkpoint_path).with_name("trainer.npz")
     if trainer_path.exists():
-        logger.info(f"Loading trainer state from {trainer_path}...")
+        logger.info("Loading trainer state from %s...", trainer_path)
         start_step = load_trainer(trainer_path, optimizer)
     else:
         start_step = 0
@@ -123,8 +129,8 @@ def train(config):
     # Data training and validation loader
     # mmap_mode='r' maps the file without loading it all into RAM
     data = np.load(config.token_path,mmap_mode='r')
-    logger.info(f"Dataset loaded with {len(data)} tokens.")
-    logger.info(f"Number of batches per epoch: {len(data) // (config.batch_size * config.max_sequence_length)}")
+    logger.info("Dataset loaded with %d tokens.", len(data))
+    logger.info("Number of batches per epoch: %d", len(data) // (config.batch_size * config.max_sequence_length))
     split = int(config.val_split*len(data))
     train_data, val_data = data[:split], data[split:]
     
@@ -149,7 +155,8 @@ def train(config):
         #backward pass
         loss.backward()
         #gradient clipping:
-        if config.clip_gradients: clip_gradients(model.parameters, max_norm=config.max_grad_norm)
+        if config.clip_gradients: 
+            clip_gradients(model.parameters, max_norm=config.max_grad_norm)
         #update weights
         optimizer.step()
 
